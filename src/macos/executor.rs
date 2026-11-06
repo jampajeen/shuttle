@@ -190,15 +190,60 @@ fn terminal_app_script(cmd: &str, target: &str, theme: &str, title: &str) -> Str
     let title = escape_for_applescript(title);
     let target_script = match target {
         "current" => format!("do script \"{escaped}\" in selected tab of front window"),
-        "tab" => format!("do script \"{escaped}\" in (do script \"\")"),
+        // Terminal's AppleScript has no "new tab" command (`do script ""` opens a
+        // window), so press ⌘T through System Events, which needs Accessibility
+        // permission. Without it, fall back to a new window. If Terminal was just
+        // launched, use the window it opens at startup instead of adding a tab.
+        "tab" => format!(
+            r#"if not terminalWasRunning then
+        repeat 20 times
+            if (count of windows) > 0 then exit repeat
+            delay 0.1
+        end repeat
+    end if
+    if (count of windows) is 0 then
+        do script "{escaped}"
+    else if not terminalWasRunning then
+        do script "{escaped}" in selected tab of front window
+    else
+        set openedTab to false
+        try
+            tell application "System Events"
+                set frontmost of process "Terminal" to true
+                keystroke "t" using {{command down}}
+            end tell
+            set openedTab to true
+        end try
+        if openedTab then
+            delay 0.3
+            do script "{escaped}" in selected tab of front window
+        else
+            do script "{escaped}"
+        end if
+    end if"#
+        ),
         _ => format!("do script \"{escaped}\""),
     };
+    // Applying a settings set resizes the window to that profile's size. A new
+    // window may take it, but an existing window the user sized must keep its size.
+    let apply_theme = if target == "new" {
+        format!(r#"set current settings of selected tab of front window to settings set "{theme}""#)
+    } else {
+        format!(
+            r#"set windowBounds to bounds of front window
+        set current settings of selected tab of front window to settings set "{theme}"
+        set bounds of front window to windowBounds"#
+        )
+    };
     format!(
-        r#"tell application "Terminal"
+        r#"set terminalWasRunning to application "Terminal" is running
+tell application "Terminal"
     activate
     {target_script}
     try
-        set current settings of selected tab of front window to settings set "{theme}"
+        {apply_theme}
+    end try
+    try
         set custom title of selected tab of front window to "{title}"
     end try
 end tell"#
@@ -355,9 +400,36 @@ mod tests {
 
         assert!(terminal_app_script("ssh prod", "current", "Basic", "Prod")
             .contains("selected tab of front window"));
-        assert!(
-            terminal_app_script("ssh prod", "tab", "Basic", "Prod").contains("in (do script \"\")")
-        );
+        let tab = terminal_app_script("ssh prod", "tab", "Basic", "Prod");
+        assert!(!tab.contains("in (do script \"\")"), "that opens a window");
+        assert!(tab.contains("keystroke \"t\" using {command down}"));
+        assert!(tab.contains("do script \"ssh prod\" in selected tab of front window"));
+        assert!(tab.starts_with("set terminalWasRunning to application \"Terminal\" is running"));
+
+        let keeps_size = "set bounds of front window to windowBounds";
+        assert!(tab.contains(keeps_size));
+        assert!(terminal_app_script("ssh prod", "current", "Basic", "Prod").contains(keeps_size));
+        assert!(!terminal_app_script("ssh prod", "new", "Basic", "Prod").contains(keeps_size));
+    }
+
+    #[test]
+    fn terminal_app_scripts_compile() {
+        // osacompile only checks syntax against Terminal's dictionary; nothing runs.
+        let dir = tempfile::tempdir().unwrap();
+        for target in ["new", "tab", "current"] {
+            let script = terminal_app_script(r#"echo "it's" \ ok"#, target, "Basic", "T");
+            let output = Command::new("/usr/bin/osacompile")
+                .args(["-o"])
+                .arg(dir.path().join(format!("{target}.scpt")))
+                .args(["-e", &script])
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{target}: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
         assert!(terminal_app_script("ssh prod", "new", "Basic", "Prod")
             .contains("settings set \"Basic\""));
 

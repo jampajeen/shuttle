@@ -270,7 +270,7 @@ For precise control, use `backend` globally or per host.
 
 | Backend             | Config value                    | Notes                                                                          |
 | ------------------- | ------------------------------- | ------------------------------------------------------------------------------ |
-| Terminal.app        | `terminal-app`                  | Supports new windows, tabs, current window, and virtual mode via AppleScript   |
+| Terminal.app        | `terminal-app`                  | Supports new windows, tabs, current window, and virtual mode via AppleScript. Tabs need Accessibility permission (see [troubleshooting](docs/troubleshooting-rust-port.md)) |
 | iTerm               | `iterm-stable`, `iterm-nightly` | Supports stable/nightly iTerm variants via AppleScript                         |
 | Ghostty open        | `ghostty-open`                  | Opens new Ghostty windows without Automation permission                        |
 | Ghostty AppleScript | `ghostty-applescript`           | Supports tabs/current windows; requires Ghostty 1.3+ and Automation permission |
