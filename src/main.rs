@@ -6,15 +6,26 @@ mod launcher;
 #[cfg(target_os = "macos")]
 mod macos;
 mod menu_model;
+#[cfg(unix)]
+mod password_setup;
+#[cfg(test)]
+mod test_support;
 mod update;
 
 #[cfg(not(test))]
 fn main() {
-    // ssh starts this executable as its SSH_ASKPASS helper for `password_ref`
-    // hosts; answer it and exit before any AppKit setup.
+    // The menu runs this executable in the terminal to set up a password for a
+    // host with an empty `password_ref`, and ssh runs it as its SSH_ASKPASS
+    // helper. Handle both and exit before any AppKit setup.
     #[cfg(unix)]
-    if let Some(code) = askpass::run_if_requested() {
-        std::process::exit(code);
+    {
+        let args: Vec<String> = std::env::args().collect();
+        if args.get(1).map(String::as_str) == Some(launcher::password::SETUP_FLAG) {
+            std::process::exit(password_setup::run(&args[2..]));
+        }
+        if let Some(code) = askpass::run_if_requested() {
+            std::process::exit(code);
+        }
     }
 
     #[cfg(target_os = "macos")]
@@ -55,9 +66,6 @@ fn build_menu_entries_from_paths(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
-
-    static HOME_ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn builds_menu_entries_from_discovered_paths() {
@@ -76,7 +84,7 @@ mod tests {
 
     #[test]
     fn builds_menu_entries_from_home_discovery() {
-        let _guard = HOME_ENV_LOCK.lock().unwrap();
+        let _guard = crate::test_support::lock_home_env();
         let temp = tempfile::tempdir().unwrap();
         let old_home = std::env::var_os("HOME");
         unsafe {

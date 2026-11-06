@@ -161,7 +161,7 @@ hosts:
 | `title`      | Terminal window/tab title                                 |
 | `backend`    | Per-host backend override                                 |
 | `strategy`   | Per-host strategy override                                |
-| `password_ref` | Saved password to type for the command: `"keychain:<account>"`. See [Saved SSH passwords](#saved-ssh-passwords-macos-keychain) |
+| `password_ref` | Saved password to type for the command: `"keychain:<account>"`, or `""` to set one up from the menu. See [Saved SSH passwords](#saved-ssh-passwords-macos-keychain) |
 
 ### Nested menus
 
@@ -208,6 +208,37 @@ Hosts with wildcards, dot-prefixed names, or matching ignore filters are skipped
 ### Saved SSH passwords (macOS Keychain)
 
 For servers that only accept password login, Shuttle can answer ssh's password prompt with a password saved in your macOS login Keychain. Nothing extra needs to be installed. Prefer SSH keys where the server allows them.
+
+**Quickest way:** leave `password_ref` empty and choose the host from the menu.
+
+```json
+{ "cmd": "ssh prod", "name": "Production", "password_ref": "" }
+```
+
+Shuttle opens your terminal and walks you through it:
+
+```text
+Shuttle: save a password for "Production"
+  menu:    Servers → Production
+  command: ssh prod
+  config:  ~/.config/shuttle/config.json
+
+Keychain account name [servers-production]:
+password data for new item:
+retype password for new item:
+
+✓ Saved in Keychain (service Shuttle, account servers-production)
+✓ Updated config: "password_ref": "keychain:servers-production"
+
+Connect now? [Y/n]:
+```
+
+- Press Enter to accept the suggested account name, which comes from the host's place in the menu, or type another one.
+- The password prompts come from macOS's `security` tool, so Shuttle never sees the password.
+- If an item with that account already exists, you can use it, replace its password, or choose another name.
+- Shuttle then sets `password_ref` on that host in your JSON config, changing only that value and keeping your formatting. For YAML configs and hosts imported from `~/.ssh/config`, it prints the line to add instead.
+
+**By hand:**
 
 1. Save the password under the Keychain service `Shuttle`, with an account name of your choice. The command asks for the password, so it never lands in your shell history:
 

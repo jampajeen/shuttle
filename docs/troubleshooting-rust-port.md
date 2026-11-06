@@ -41,7 +41,9 @@ Without them, Shuttle opens the command in a new window instead. A locally rebui
 - **A Keychain dialog asks whether `security` may use the item**: the item was created in Keychain Access or by another app. Choose **Always Allow**, or delete it and re-create it with the `security` command above.
 - **ssh still asks for the password every time**: the command does not run OpenSSH 8.4 or later (for example an old `ssh` earlier in `PATH`), so `SSH_ASKPASS_REQUIRE=force` is ignored. Check with `ssh -V`.
 - **The terminal stops showing what you type**: an askpass prompt was interrupted while it had echo turned off. Run `stty echo` or `reset`.
-- **The menu shows `invalid password_ref`**: the value must be `keychain:<account>`, with the account name, not the password.
+- **The menu shows `invalid password_ref`**: the value must be `keychain:<account>` with the account name, not the password, or `""` to set one up from the menu.
+- **Setup says `config: not updated automatically`**: Shuttle only edits JSON configs, and only when exactly one host with that `name` and `cmd` has `"password_ref": ""`. Add the printed `"password_ref"` line to the host yourself, or give duplicate hosts different names.
+- **Setup runs in a `screen` session nobody sees**: hosts in `virtual` mode run detached, so set up their password with the host in another mode first, or save it by hand.
 
 ## cmux socket access
 

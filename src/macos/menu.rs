@@ -65,7 +65,7 @@ pub unsafe fn rebuild_menu(status_item: id, entries: &[MenuEntry], config: &Conf
 
 #[cfg(all(target_os = "macos", not(test)))]
 unsafe fn build_full_menu(entries: &[MenuEntry], config: &Config, delegate: id) -> id {
-    let menu = build_ns_menu(entries, config);
+    let menu = build_ns_menu(entries, config, &[]);
 
     menu.addItem_(NSMenuItem::separatorItem(nil));
 
@@ -153,7 +153,7 @@ pub fn install_status_menu(entries: &[MenuEntry], config: &Config, delegate: id)
 // ── Recursive menu builder ────────────────────────────────────────────────────
 
 #[cfg(all(target_os = "macos", not(test)))]
-unsafe fn build_ns_menu(entries: &[MenuEntry], config: &Config) -> id {
+unsafe fn build_ns_menu(entries: &[MenuEntry], config: &Config, folders: &[String]) -> id {
     let menu = NSMenu::new(nil).autorelease();
     let _: () = msg_send![menu, setAutoenablesItems: NO];
 
@@ -163,13 +163,17 @@ unsafe fn build_ns_menu(entries: &[MenuEntry], config: &Config) -> id {
                 title, children, ..
             } => {
                 let item = static_item(title, true);
-                let submenu = build_ns_menu(children, config);
+                let mut path = folders.to_vec();
+                path.push(title.clone());
+                let submenu = build_ns_menu(children, config, &path);
                 item.setSubmenu_(submenu);
                 menu.addItem_(item);
             }
             MenuEntry::Command { title, command, .. } => {
                 // Resolve the full launch payload so target/title/theme survive to execution.
-                match resolve_launch_payload(config, command) {
+                let mut path = folders.to_vec();
+                path.push(title.clone());
+                match resolve_launch_payload(config, command, &path) {
                     Ok(launch_payload) => {
                         let item = command_item(title, &command.cmd, &launch_payload);
                         menu.addItem_(item);
@@ -236,15 +240,25 @@ unsafe fn titled_action_item(title: &str, action: objc::runtime::Sel) -> id {
 // NOTE: The ObjC action target stores this serialized payload on NSMenuItem
 // actions, so `executor::execute` must deserialize the same backend/target
 // strings below. Keep both sides in sync when adding launcher variants.
+/// `menu_path` is the host's place in the menu, ending with its own title.
 fn resolve_launch_payload(
     config: &Config,
     host: &crate::config::model::CommandHost,
+    menu_path: &[String],
 ) -> Result<String, crate::launcher::LaunchError> {
+    use crate::launcher::password::{self, PasswordSetting};
+
     match crate::launcher::normalize(config, host, &host.name)? {
         LaunchKind::Url(url) => Ok(format!("url:{url}")),
         LaunchKind::Terminal(req) => {
-            let password_ref = crate::launcher::password::from_host(host)?
-                .map(|password| password.to_config_value());
+            let (password_ref, password_setup) = match password::from_host(host)? {
+                None => (None, None),
+                Some(PasswordSetting::Saved(saved)) => (Some(saved.to_config_value()), None),
+                Some(PasswordSetting::NeedsSetup) => (
+                    None,
+                    Some(serde_json::json!({ "name": host.name, "path": menu_path })),
+                ),
+            };
             Ok(serde_json::json!({
                 "kind": "terminal",
                 "backend": backend_to_str(&req.backend),
@@ -252,6 +266,7 @@ fn resolve_launch_payload(
                 "title": req.title,
                 "theme": req.theme_or_profile,
                 "password_ref": password_ref,
+                "password_setup": password_setup,
             })
             .to_string())
         }
@@ -345,7 +360,7 @@ mod tests {
             password_ref: None,
             extra: BTreeMap::new(),
         };
-        assert!(resolve_launch_payload(&config, &host)
+        assert!(resolve_launch_payload(&config, &host, &[])
             .unwrap()
             .starts_with("url:"));
     }
@@ -367,7 +382,7 @@ mod tests {
             password_ref: None,
             extra: BTreeMap::new(),
         };
-        assert!(resolve_launch_payload(&config, &host)
+        assert!(resolve_launch_payload(&config, &host, &[])
             .unwrap()
             .contains("\"backend\":\"ghostty-applescript\""));
     }
@@ -386,7 +401,7 @@ mod tests {
             password_ref: None,
             extra: BTreeMap::new(),
         };
-        let payload = resolve_launch_payload(&config, &host).unwrap();
+        let payload = resolve_launch_payload(&config, &host, &[]).unwrap();
         assert!(!payload.starts_with("url:"));
         assert!(payload.contains("\"backend\":\"screen\""));
         assert!(payload.contains("\"target\":\"virtual\""));
@@ -410,7 +425,7 @@ mod tests {
             password_ref: None,
             extra: BTreeMap::new(),
         };
-        let payload = resolve_launch_payload(&config, &host).unwrap();
+        let payload = resolve_launch_payload(&config, &host, &[]).unwrap();
         assert!(payload.contains("\"backend\":\"iterm-stable\""));
         assert!(payload.contains("\"target\":\"current\""));
         assert!(payload.contains("\"title\":\"Production\""));
@@ -431,19 +446,31 @@ mod tests {
             extra: BTreeMap::new(),
         };
         let config = Config::default();
-        assert!(resolve_launch_payload(&config, &host)
+        assert!(resolve_launch_payload(&config, &host, &[])
             .unwrap()
             .contains("\"password_ref\":null"));
 
         host.password_ref = Some(" keychain: prod ".into());
-        assert!(resolve_launch_payload(&config, &host)
+        assert!(resolve_launch_payload(&config, &host, &[])
             .unwrap()
             .contains("\"password_ref\":\"keychain:prod\""));
 
         host.password_ref = Some("hunter2".into());
-        let error = resolve_launch_payload(&config, &host).unwrap_err();
+        let error = resolve_launch_payload(&config, &host, &[]).unwrap_err();
         assert_eq!(error, crate::launcher::LaunchError::PasswordRef);
         assert!(!error.to_string().contains("hunter2"));
+
+        host.password_ref = Some(String::new());
+        host.name = "[aaa]Prod".into();
+        let payload: serde_json::Value = serde_json::from_str(
+            &resolve_launch_payload(&config, &host, &["EL".into(), "Prod".into()]).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(payload["password_ref"], serde_json::Value::Null);
+        assert_eq!(
+            payload["password_setup"],
+            serde_json::json!({ "name": "[aaa]Prod", "path": ["EL", "Prod"] })
+        );
     }
 
     #[test]
@@ -463,6 +490,6 @@ mod tests {
             password_ref: None,
             extra: BTreeMap::new(),
         };
-        assert!(resolve_launch_payload(&config, &host).is_err());
+        assert!(resolve_launch_payload(&config, &host, &[]).is_err());
     }
 }

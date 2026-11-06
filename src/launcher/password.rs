@@ -66,13 +66,47 @@ impl PasswordRef {
     }
 }
 
-/// Validates the host's `password_ref`, if any.
-pub fn from_host(host: &CommandHost) -> Result<Option<PasswordRef>, LaunchError> {
-    host.password_ref
-        .as_deref()
-        .map(PasswordRef::parse)
-        .transpose()
+/// What a host's `password_ref` asks for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PasswordSetting {
+    /// Use this saved password.
+    Saved(PasswordRef),
+    /// `password_ref` is empty: save a password first (see `crate::password_setup`).
+    NeedsSetup,
 }
+
+/// Validates the host's `password_ref`, if any.
+pub fn from_host(host: &CommandHost) -> Result<Option<PasswordSetting>, LaunchError> {
+    match host.password_ref.as_deref() {
+        None => Ok(None),
+        Some(value) if value.trim().is_empty() => Ok(Some(PasswordSetting::NeedsSetup)),
+        Some(value) => {
+            PasswordRef::parse(value).map(|password| Some(PasswordSetting::Saved(password)))
+        }
+    }
+}
+
+/// The command that runs Shuttle's password setup in the terminal for a host
+/// with an empty `password_ref`. `menu_path` is the host's place in the menu,
+/// ending with its own title; `host_name` is its raw `name` from the config.
+pub fn setup_command(
+    shuttle_program: &Path,
+    host_name: &str,
+    command: &str,
+    menu_path: &[String],
+) -> String {
+    let mut parts = vec![
+        shell_quote(&shuttle_program.to_string_lossy()),
+        SETUP_FLAG.to_string(),
+        shell_quote(host_name),
+        shell_quote(command),
+    ];
+    parts.extend(menu_path.iter().map(|part| shell_quote(part)));
+    parts.join(" ")
+}
+
+/// First argument that starts the Shuttle executable in password setup mode.
+pub const SETUP_FLAG: &str = "--setup-password";
 
 /// Wraps `command` so ssh asks `askpass_program` (the Shuttle executable)
 /// for the saved password.
@@ -146,8 +180,31 @@ mod tests {
     #[test]
     fn reads_optional_host_ref() {
         assert_eq!(from_host(&host(None)).unwrap(), None);
-        assert!(from_host(&host(Some("keychain:prod"))).unwrap().is_some());
+        assert!(matches!(
+            from_host(&host(Some("keychain:prod"))).unwrap(),
+            Some(PasswordSetting::Saved(_))
+        ));
+        for empty in ["", "  "] {
+            assert_eq!(
+                from_host(&host(Some(empty))).unwrap(),
+                Some(PasswordSetting::NeedsSetup)
+            );
+        }
         assert!(from_host(&host(Some("nope"))).is_err());
+    }
+
+    #[test]
+    fn setup_command_quotes_every_argument() {
+        let command = setup_command(
+            Path::new("/Apps/My Shuttle.app/Contents/MacOS/shuttle-rs"),
+            "[aaa]Local's Server",
+            "ssh user@10.0.0.1",
+            &["EL".into(), "Local".into(), "Local's Server".into()],
+        );
+        assert_eq!(
+            command,
+            "'/Apps/My Shuttle.app/Contents/MacOS/shuttle-rs' --setup-password '[aaa]Local'\\''s Server' 'ssh user@10.0.0.1' 'EL' 'Local' 'Local'\\''s Server'"
+        );
     }
 
     #[test]

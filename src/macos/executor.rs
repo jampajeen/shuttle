@@ -12,6 +12,18 @@ struct TerminalPayload {
     theme: String,
     #[serde(default)]
     password_ref: Option<String>,
+    #[serde(default)]
+    password_setup: Option<PasswordSetupPayload>,
+}
+
+/// A host with an empty `password_ref`: run password setup instead.
+#[cfg(not(test))]
+#[derive(Debug, Deserialize)]
+struct PasswordSetupPayload {
+    /// Raw `name` from the config, used to find the host when saving.
+    name: String,
+    /// Menu titles down to the host, used for the default Keychain account.
+    path: Vec<String>,
 }
 
 /// Top-level dispatch. `backend` is a resolved backend string (e.g. "ghostty-open",
@@ -21,27 +33,10 @@ pub fn execute(cmd: &str, backend: &str) {
     let cmd = normalize_cmd(cmd);
     if let Ok(payload) = serde_json::from_str::<TerminalPayload>(backend) {
         if payload.kind == "terminal" {
-            let cmd = match payload.password_ref.as_deref() {
-                None => cmd,
-                Some(value) => {
-                    let password = crate::launcher::password::PasswordRef::parse(value);
-                    match (password, std::env::current_exe()) {
-                        // ssh runs this executable again in askpass mode.
-                        (Ok(password), Ok(askpass)) => {
-                            crate::launcher::password::wrap_command(&cmd, &password, &askpass)
-                        }
-                        (Err(error), _) => {
-                            eprintln!("Shuttle: {error}");
-                            return;
-                        }
-                        (_, Err(error)) => {
-                            eprintln!("Shuttle: cannot locate own executable for askpass: {error}");
-                            return;
-                        }
-                    }
-                }
-            };
-            execute_terminal_payload(&cmd, &payload);
+            match terminal_command(&cmd, &payload) {
+                Ok(cmd) => execute_terminal_payload(&cmd, &payload),
+                Err(error) => eprintln!("Shuttle: {error}"),
+            }
             return;
         }
     }
@@ -59,6 +54,31 @@ pub fn execute(cmd: &str, backend: &str) {
         // terminal-app and anything unknown fall through to Terminal.app
         _ => launch_terminal_app(&cmd, "new", "basic", "shuttle"),
     }
+}
+
+/// The command line to type into the terminal for `cmd`, wrapped for a saved
+/// password or replaced by password setup. Both re-run this executable.
+#[cfg(not(test))]
+fn terminal_command(cmd: &str, payload: &TerminalPayload) -> Result<String, String> {
+    use crate::launcher::password;
+
+    if payload.password_ref.is_none() && payload.password_setup.is_none() {
+        return Ok(cmd.to_string());
+    }
+    let shuttle = std::env::current_exe()
+        .map_err(|error| format!("cannot locate own executable for passwords: {error}"))?;
+    if let Some(setup) = &payload.password_setup {
+        return Ok(password::setup_command(
+            &shuttle,
+            &setup.name,
+            cmd,
+            &setup.path,
+        ));
+    }
+    let saved = payload.password_ref.as_deref().unwrap_or_default();
+    let saved = password::PasswordRef::parse(saved).map_err(|error| error.to_string())?;
+    // ssh runs this executable again in askpass mode.
+    Ok(password::wrap_command(cmd, &saved, &shuttle))
 }
 
 #[cfg(not(test))]
@@ -79,16 +99,7 @@ fn execute_terminal_payload(cmd: &str, payload: &TerminalPayload) {
 
 /// Collapse multi-line commands (JSON \n) into a single shell-safe command.
 fn normalize_cmd(cmd: &str) -> String {
-    let lines: Vec<&str> = cmd
-        .lines()
-        .map(|l| l.trim())
-        .filter(|l| !l.is_empty())
-        .collect();
-    if lines.len() == 1 {
-        lines[0].to_string()
-    } else {
-        lines.join(" && ")
-    }
+    crate::launcher::normalize_command(cmd)
 }
 
 // ── URL ───────────────────────────────────────────────────────────────────────

@@ -101,6 +101,16 @@ pub fn normalize(
     }))
 }
 
+/// Collapses a multi-line config command into one shell command line.
+pub fn normalize_command(command: &str) -> String {
+    let lines: Vec<&str> = command
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect();
+    lines.join(" && ")
+}
+
 fn normalize_target(
     host_target: Option<&str>,
     config_target: Option<&str>,

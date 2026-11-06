@@ -101,6 +101,8 @@ mod tests {
 
     #[test]
     fn init_stores_state_and_no_snapshot_change_skips_reload() {
+        // Both tests here share APP_STATE, and snapshots read ~/.ssh/config via HOME.
+        let _home = crate::test_support::lock_home_env();
         let temp = tempfile::tempdir().unwrap();
         let main = temp.path().join("config.json");
         std::fs::write(&main, "{}").unwrap();
@@ -121,6 +123,7 @@ mod tests {
 
     #[test]
     fn reload_needed_detects_changed_snapshot() {
+        let _home = crate::test_support::lock_home_env();
         let temp = tempfile::tempdir().unwrap();
         let main = temp.path().join("config.json");
         std::fs::write(&main, "{}").unwrap();
