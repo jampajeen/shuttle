@@ -9,10 +9,13 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/philipbrembeck/shuttle/releases/latest"><strong>Download latest release</strong></a>  &middot; <a href="https://philipbrembeck.github.io/shuttle/">Website</a> &middot; <a href="#install">Installation instructions</a> &middot; <a href="#config-basics">Config documentation</a>
+  <a href="https://github.com/jampajeen/shuttle/releases/latest"><strong>Download latest release</strong></a>  &middot; <a href="https://philipbrembeck.github.io/shuttle/">Upstream website</a> &middot; <a href="#install">Installation instructions</a> &middot; <a href="#config-basics">Config documentation</a>
 </p>
 
 ---
+
+> [!NOTE]
+> This is a personal fork of [philipbrembeck/shuttle](https://github.com/philipbrembeck/shuttle). Upstream is tracked as the `upstream` git remote; **Check for Updates…** pulls releases from this fork, not upstream.
 
 > [!NOTE]
 > This repository is experimental software provided as-is, ported to Rust exclusively using AI Agents. Use it at your own risk; we assume no liability for issues, data loss, security problems, or operational impact.
@@ -39,7 +42,7 @@ Use it for:
 
 ### Download the app
 
-1. Open the [latest release](https://github.com/philipbrembeck/shuttle/releases/latest).
+1. Open the [latest release](https://github.com/jampajeen/shuttle/releases/latest).
 2. Download `Shuttle.zip` from **Assets**.
 3. Unzip it.
 4. Drag `Shuttle.app` into `/Applications`.

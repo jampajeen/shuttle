@@ -4,9 +4,8 @@ use std::cmp::Ordering;
 use std::process::Command;
 
 #[cfg(not(test))]
-const LATEST_RELEASE_API: &str =
-    "https://api.github.com/repos/philipbrembeck/shuttle/releases/latest";
-const RELEASES_URL: &str = "https://github.com/philipbrembeck/shuttle/releases/latest";
+const LATEST_RELEASE_API: &str = "https://api.github.com/repos/jampajeen/shuttle/releases/latest";
+const RELEASES_URL: &str = "https://github.com/jampajeen/shuttle/releases/latest";
 
 #[derive(Debug, Deserialize)]
 struct GitHubRelease {

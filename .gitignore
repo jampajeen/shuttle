@@ -4,5 +4,6 @@
 target/
 
 # Local editor/OS state
+.claude/settings.local.json
 *.swp
 *.swo
