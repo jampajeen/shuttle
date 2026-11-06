@@ -399,6 +399,25 @@ mod tests {
     }
 
     #[test]
+    fn command_hosts_read_password_ref_from_json_and_yaml() {
+        let json: Config = serde_json::from_str(
+            r#"{"hosts": [{"cmd": "ssh prod", "name": "Prod", "password_ref": "keychain:prod"}]}"#,
+        )
+        .unwrap();
+        let yaml: Config = yaml_serde::from_str(
+            "hosts:\n  - cmd: ssh prod\n    name: Prod\n    password_ref: keychain:prod\n",
+        )
+        .unwrap();
+        for config in [json, yaml] {
+            let HostEntry::Command(host) = &config.hosts[0] else {
+                panic!("expected command host");
+            };
+            assert_eq!(host.password_ref.as_deref(), Some("keychain:prod"));
+            assert!(host.extra.is_empty());
+        }
+    }
+
+    #[test]
     fn load_config_loads_yml_as_yaml() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("config.yml");

@@ -1,6 +1,7 @@
 pub mod cmux;
 pub mod ghostty;
 pub mod iterm;
+pub mod password;
 pub mod terminal_app;
 pub mod url;
 pub mod virtual_screen;
@@ -69,6 +70,9 @@ pub enum LaunchError {
     Backend(String),
     #[error("'{0}' is not a supported strategy. Use default, workspace, socket, or applescript.")]
     Strategy(String),
+    // Never echo the value: someone may have put the password itself here.
+    #[error("invalid password_ref. Use 'keychain:<account>' with the Keychain account name, not the password.")]
+    PasswordRef,
 }
 
 pub fn normalize(
@@ -216,6 +220,7 @@ mod tests {
             title: None,
             backend: None,
             strategy: None,
+            password_ref: None,
             extra: BTreeMap::new(),
         }
     }

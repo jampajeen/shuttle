@@ -144,6 +144,7 @@ mod tests {
             title: None,
             backend: None,
             strategy: None,
+            password_ref: None,
             extra: BTreeMap::new(),
         })
     }

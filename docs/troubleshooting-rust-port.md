@@ -25,6 +25,15 @@ AppleScript backends require macOS Automation permission. If Terminal.app, iTerm
 - iTerm backends require iTerm installed and the matching `iTerm_version` / backend value.
 - `screen` mode requires `/usr/bin/screen` or a compatible `screen` in PATH.
 
+## Saved SSH passwords (`password_ref`)
+
+- **`no password saved in Keychain for account …; type the password instead`**: save one with `security add-generic-password -s Shuttle -a <account> -w`. The account must match the part after `keychain:` exactly, and the service must be `Shuttle`.
+- **`the saved password was not accepted; type the password instead`**: the server rejected the saved password. Type it this time, then update the saved one with `security add-generic-password -U -s Shuttle -a <account> -w`.
+- **A Keychain dialog asks whether `security` may use the item**: the item was created in Keychain Access or by another app. Choose **Always Allow**, or delete it and re-create it with the `security` command above.
+- **ssh still asks for the password every time**: the command does not run OpenSSH 8.4 or later (for example an old `ssh` earlier in `PATH`), so `SSH_ASKPASS_REQUIRE=force` is ignored. Check with `ssh -V`.
+- **The terminal stops showing what you type**: an askpass prompt was interrupted while it had echo turned off. Run `stty echo` or `reset`.
+- **The menu shows `invalid password_ref`**: the value must be `keychain:<account>`, with the account name, not the password.
+
 ## cmux socket access
 
 `cmux-socket` uses a Unix socket, defaulting to `/tmp/cmux.sock`. Override it with:
