@@ -19,6 +19,15 @@ AppleScript backends require macOS Automation permission. If Terminal.app, iTerm
 3. Enable the target terminal application.
 4. Restart Shuttle and retry.
 
+### Terminal.app tabs open as new windows
+
+Terminal.app has no AppleScript command for a new tab, so `tab` mode presses ⌘T through System Events. That needs two more permissions for Shuttle:
+
+1. System Settings → Privacy & Security → **Accessibility**: turn on Shuttle.
+2. System Settings → Privacy & Security → **Automation**: under Shuttle, turn on **System Events**.
+
+Without them, Shuttle opens the command in a new window instead. A locally rebuilt, ad-hoc signed Shuttle counts as a new app, so grant Accessibility again after each rebuild (remove the old Shuttle entry first).
+
 ## Missing terminal apps
 
 - `ghostty-open` and `ghostty-applescript` require `Ghostty.app` in `/Applications`.
