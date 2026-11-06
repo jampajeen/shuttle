@@ -1,4 +1,6 @@
 //! Shuttle - macOS menu bar launcher for SSH sessions, commands, and URLs.
+#[cfg(unix)]
+mod askpass;
 mod config;
 mod launcher;
 #[cfg(target_os = "macos")]
@@ -8,6 +10,13 @@ mod update;
 
 #[cfg(not(test))]
 fn main() {
+    // ssh starts this executable as its SSH_ASKPASS helper for `password_ref`
+    // hosts; answer it and exit before any AppKit setup.
+    #[cfg(unix)]
+    if let Some(code) = askpass::run_if_requested() {
+        std::process::exit(code);
+    }
+
     #[cfg(target_os = "macos")]
     macos::app::run();
 

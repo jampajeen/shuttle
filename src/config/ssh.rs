@@ -85,11 +85,12 @@ pub fn merge_hosts(
         if !should_include(name, ignored_hosts, ignored_keywords) {
             continue;
         }
-        insert_path(root, name, alias);
+        let password_ref = host.metadata.get("password_ref").cloned();
+        insert_path(root, name, alias, password_ref);
     }
 }
 
-fn insert_path(root: &mut Vec<HostEntry>, name: &str, alias: &str) {
+fn insert_path(root: &mut Vec<HostEntry>, name: &str, alias: &str, password_ref: Option<String>) {
     let mut parts: Vec<&str> = name.split('/').collect();
     let Some(leaf) = parts.pop() else {
         return;
@@ -106,6 +107,7 @@ fn insert_path(root: &mut Vec<HostEntry>, name: &str, alias: &str) {
         title: None,
         backend: None,
         strategy: None,
+        password_ref,
         extra: BTreeMap::new(),
     }));
 }
@@ -217,6 +219,27 @@ mod tests {
         )]);
         merge_hosts(&mut root, &hosts, &[], &[]);
         assert!(matches!(&root[0], HostEntry::Menu(map) if map.contains_key("Servers")));
+    }
+
+    #[test]
+    fn imports_password_ref_metadata() {
+        let parsed = parse_str(
+            "Host prod\n  # shuttle.password_ref keychain:prod\nHost dev\n",
+            Path::new("."),
+        );
+        let mut root = Vec::new();
+        merge_hosts(&mut root, &parsed, &[], &[]);
+        let refs: Vec<_> = root
+            .iter()
+            .map(|entry| match entry {
+                HostEntry::Command(host) => (host.cmd.as_str(), host.password_ref.as_deref()),
+                HostEntry::Menu(_) => panic!("command expected"),
+            })
+            .collect();
+        assert_eq!(
+            refs,
+            [("ssh dev", None), ("ssh prod", Some("keychain:prod"))]
+        );
     }
 
     #[test]

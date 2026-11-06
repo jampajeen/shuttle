@@ -50,6 +50,9 @@ pub struct CommandHost {
     pub backend: Option<String>,
     #[serde(default)]
     pub strategy: Option<String>,
+    /// Saved password to type for the command, e.g. `keychain:prod`.
+    #[serde(default)]
+    pub password_ref: Option<String>,
     #[serde(flatten)]
     pub extra: std::collections::BTreeMap<String, Value>,
 }

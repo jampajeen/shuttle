@@ -242,14 +242,19 @@ fn resolve_launch_payload(
 ) -> Result<String, crate::launcher::LaunchError> {
     match crate::launcher::normalize(config, host, &host.name)? {
         LaunchKind::Url(url) => Ok(format!("url:{url}")),
-        LaunchKind::Terminal(req) => Ok(serde_json::json!({
-            "kind": "terminal",
-            "backend": backend_to_str(&req.backend),
-            "target": target_to_str(&req.target),
-            "title": req.title,
-            "theme": req.theme_or_profile,
-        })
-        .to_string()),
+        LaunchKind::Terminal(req) => {
+            let password_ref = crate::launcher::password::from_host(host)?
+                .map(|password| password.to_config_value());
+            Ok(serde_json::json!({
+                "kind": "terminal",
+                "backend": backend_to_str(&req.backend),
+                "target": target_to_str(&req.target),
+                "title": req.title,
+                "theme": req.theme_or_profile,
+                "password_ref": password_ref,
+            })
+            .to_string())
+        }
     }
 }
 
@@ -304,6 +309,7 @@ mod tests {
                     title: None,
                     backend: None,
                     strategy: None,
+                    password_ref: None,
                     extra: BTreeMap::new(),
                 },
                 separator_after: false,
@@ -336,6 +342,7 @@ mod tests {
             title: None,
             backend: None,
             strategy: None,
+            password_ref: None,
             extra: BTreeMap::new(),
         };
         assert!(resolve_launch_payload(&config, &host)
@@ -357,6 +364,7 @@ mod tests {
             title: None,
             backend: None,
             strategy: None,
+            password_ref: None,
             extra: BTreeMap::new(),
         };
         assert!(resolve_launch_payload(&config, &host)
@@ -375,6 +383,7 @@ mod tests {
             title: None,
             backend: None,
             strategy: None,
+            password_ref: None,
             extra: BTreeMap::new(),
         };
         let payload = resolve_launch_payload(&config, &host).unwrap();
@@ -398,6 +407,7 @@ mod tests {
             title: Some("Production".into()),
             backend: None,
             strategy: None,
+            password_ref: None,
             extra: BTreeMap::new(),
         };
         let payload = resolve_launch_payload(&config, &host).unwrap();
@@ -405,6 +415,35 @@ mod tests {
         assert!(payload.contains("\"target\":\"current\""));
         assert!(payload.contains("\"title\":\"Production\""));
         assert!(payload.contains("\"theme\":\"Homebrew\""));
+    }
+
+    #[test]
+    fn terminal_payload_carries_password_ref() {
+        let mut host = CommandHost {
+            cmd: "ssh prod".into(),
+            name: "Prod".into(),
+            in_terminal: None,
+            theme: None,
+            title: None,
+            backend: None,
+            strategy: None,
+            password_ref: None,
+            extra: BTreeMap::new(),
+        };
+        let config = Config::default();
+        assert!(resolve_launch_payload(&config, &host)
+            .unwrap()
+            .contains("\"password_ref\":null"));
+
+        host.password_ref = Some(" keychain: prod ".into());
+        assert!(resolve_launch_payload(&config, &host)
+            .unwrap()
+            .contains("\"password_ref\":\"keychain:prod\""));
+
+        host.password_ref = Some("hunter2".into());
+        let error = resolve_launch_payload(&config, &host).unwrap_err();
+        assert_eq!(error, crate::launcher::LaunchError::PasswordRef);
+        assert!(!error.to_string().contains("hunter2"));
     }
 
     #[test]
@@ -421,6 +460,7 @@ mod tests {
             title: None,
             backend: None,
             strategy: None,
+            password_ref: None,
             extra: BTreeMap::new(),
         };
         assert!(resolve_launch_payload(&config, &host).is_err());

@@ -10,6 +10,8 @@ struct TerminalPayload {
     target: String,
     title: String,
     theme: String,
+    #[serde(default)]
+    password_ref: Option<String>,
 }
 
 /// Top-level dispatch. `backend` is a resolved backend string (e.g. "ghostty-open",
@@ -19,6 +21,26 @@ pub fn execute(cmd: &str, backend: &str) {
     let cmd = normalize_cmd(cmd);
     if let Ok(payload) = serde_json::from_str::<TerminalPayload>(backend) {
         if payload.kind == "terminal" {
+            let cmd = match payload.password_ref.as_deref() {
+                None => cmd,
+                Some(value) => {
+                    let password = crate::launcher::password::PasswordRef::parse(value);
+                    match (password, std::env::current_exe()) {
+                        // ssh runs this executable again in askpass mode.
+                        (Ok(password), Ok(askpass)) => {
+                            crate::launcher::password::wrap_command(&cmd, &password, &askpass)
+                        }
+                        (Err(error), _) => {
+                            eprintln!("Shuttle: {error}");
+                            return;
+                        }
+                        (_, Err(error)) => {
+                            eprintln!("Shuttle: cannot locate own executable for askpass: {error}");
+                            return;
+                        }
+                    }
+                }
+            };
             execute_terminal_payload(&cmd, &payload);
             return;
         }

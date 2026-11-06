@@ -158,6 +158,7 @@ hosts:
 | `title`      | Terminal window/tab title                                 |
 | `backend`    | Per-host backend override                                 |
 | `strategy`   | Per-host strategy override                                |
+| `password_ref` | Saved password to type for the command: `"keychain:<account>"`. See [Saved SSH passwords](#saved-ssh-passwords-macos-keychain) |
 
 ### Nested menus
 
@@ -200,6 +201,36 @@ Host prod
 ```
 
 Hosts with wildcards, dot-prefixed names, or matching ignore filters are skipped.
+
+### Saved SSH passwords (macOS Keychain)
+
+For servers that only accept password login, Shuttle can answer ssh's password prompt with a password saved in your macOS login Keychain. Nothing extra needs to be installed. Prefer SSH keys where the server allows them.
+
+1. Save the password under the Keychain service `Shuttle`, with an account name of your choice. The command asks for the password, so it never lands in your shell history:
+
+   ```sh
+   security add-generic-password -s Shuttle -a prod -w
+   ```
+
+2. Point the host at that account with `password_ref`:
+
+   ```json
+   { "cmd": "ssh prod", "name": "Production", "password_ref": "keychain:prod" }
+   ```
+
+   Or, for a host imported from `~/.ssh/config`:
+
+   ```sshconfig
+   Host prod
+     HostName prod.example.com
+     # shuttle.password_ref keychain:prod
+   ```
+
+How it works: Shuttle runs the command with ssh's `SSH_ASKPASS` pointing at the Shuttle app itself (`SSH_ASKPASS_REQUIRE=force`, OpenSSH 8.4 or later, which macOS includes). When ssh asks for the password, Shuttle reads it from the Keychain and hands it to ssh over a pipe, so it never appears in a command line, environment variable, scrollback, or shell history. Other questions, such as accepting a new host key or a key passphrase, are still asked in your terminal. Each ssh connection gets one automatic try: if the server rejects the saved password, Shuttle asks you to type it instead of sending the wrong one again.
+
+`password_ref` works with ssh-based commands (`ssh`, `scp`, `sftp`, `rsync` over ssh, `git` over ssh), but not with URLs.
+
+Limits: the login Keychain is per Mac and does not sync through iCloud, so save the password on each Mac. Change a saved password with `security add-generic-password -U -s Shuttle -a prod -w`, and remove it with `security delete-generic-password -s Shuttle -a prod`.
 
 ### Alternate and custom config paths
 
